@@ -16,6 +16,8 @@
 #include "utilmoneystr.h"
 #include "utiltime.h"
 #include "version.h"
+#include "core_io.h"
+#include "utilstrencodings.h"
 
 using namespace std;
 
@@ -279,7 +281,7 @@ void CTxMemPool::UpdateForRemoveFromMempool(const setEntries &entriesToRemove)
         // should be a bit faster.
         // However, if we happen to be in the middle of processing a reorg, then
         // the mempool can be in an inconsistent state.  In this case, the set
-        // of ancestors reachable via mapLinks will be the same as the set of 
+        // of ancestors reachable via mapLinks will be the same as the set of
         // ancestors whose packages include this transaction, because when we
         // add a new transaction to the mempool in addUnchecked(), we assume it
         // has no children, and in the case of a reorg where that assumption is
@@ -510,17 +512,67 @@ void CTxMemPool::addSpentIndex(const CTxMemPoolEntry &entry, const CCoinsViewCac
         uint160 addressHash;
         int addressType;
 
+        int witnessversion;
+        std::vector<unsigned char> witnessprogram;
+
         if (prevout.scriptPubKey.IsPayToScriptHash()) {
+            LogPrintf("addSpentIndex scriptPubKey (2) asm(%s) hex(%s).\n", ScriptToAsmStr(prevout.scriptPubKey), HexStr(prevout.scriptPubKey.begin(), prevout.scriptPubKey.end()));
             addressHash = uint160(vector<unsigned char> (prevout.scriptPubKey.begin()+2, prevout.scriptPubKey.begin()+22));
             addressType = 2;
         } else if (prevout.scriptPubKey.IsPayToPublicKeyHash()) {
+            LogPrintf("addSpentIndex scriptPubKey (1) asm(%s) hex(%s).\n", ScriptToAsmStr(prevout.scriptPubKey), HexStr(prevout.scriptPubKey.begin(), prevout.scriptPubKey.end()));
             addressHash = uint160(vector<unsigned char> (prevout.scriptPubKey.begin()+3, prevout.scriptPubKey.begin()+23));
             addressType = 1;
-        } else {
-            addressHash.SetNull();
-            addressType = 0;
-        }
+          } else if (prevout.scriptPubKey.IsWitnessProgram(witnessversion, witnessprogram)) {
+              if (witnessversion == 0 && witnessprogram.size() == 20) {
+                  LogPrintf("addSpentIndex scriptPubKey (3) asm(%s) hex(%s).\n", ScriptToAsmStr(prevout.scriptPubKey), HexStr(prevout.scriptPubKey.begin(), prevout.scriptPubKey.end()));
+                  addressHash = uint160(vector <unsigned char>(prevout.scriptPubKey.begin()+2, prevout.scriptPubKey.begin()+22));
+                  addressType = 3;
+              }
+              if (witnessversion == 0 && witnessprogram.size() == 32) {
+                  LogPrintf("addSpentIndex scriptPubKey (4) asm(%s) hex(%s).\n", ScriptToAsmStr(prevout.scriptPubKey), HexStr(prevout.scriptPubKey.begin(), prevout.scriptPubKey.end()));
+                  // hashBytes = uint160(vector <unsigned char>(prevout.scriptPubKey.begin()+0, prevout.scriptPubKey.begin()+32));
+                  // hashBytes = uint160(vector <unsigned char>(prevout.scriptPubKey.begin()+3, prevout.scriptPubKey.begin()+23));
+                  // hashBytes = uint160(vector <unsigned char>(prevout.scriptPubKey.begin()+2, prevout.scriptPubKey.begin()+22));
 
+                  /*
+                  std::vector<vector<unsigned char>> vSolutions;
+                  vSolutions.clear();
+                  vSolutions.push_back(witnessprogram);
+                  WitnessV0ScriptHash hash;
+                  std::copy(vSolutions[0].begin(), vSolutions[0].end(), hash.begin());
+
+                  const CChainParams& m_params(Params());
+                  std::vector<unsigned char> data = {0};
+                  ConvertBits<8, 5, true>(data, hash.begin(), hash.end());
+                  std::string _hash = bech32::Encode(m_params.Bech32HRP(), data);
+
+                  LogPrintf("addSpentIndex scriptPubKey (5) hash(%s).\n", _hash);
+                  vector <unsigned char> _vector = vector <unsigned char>(_hash.begin(), _hash.end());
+                  std::string s1(_vector.begin(), _vector.end());
+                  LogPrintf("addSpentIndex scriptPubKey (6) hash(%s).\n", s1);
+
+                  vector <unsigned char> _vector2 = vector <unsigned char>(prevout.scriptPubKey.begin()+2, prevout.scriptPubKey.begin()+34);
+                  std::string s2(_vector2.begin(), _vector2.end());
+                  LogPrintf("addSpentIndex scriptPubKey (7) hash(%s).\n", s2);
+
+                  vector <unsigned char> _vector3 = vector <unsigned char>(hash.begin(), hash.end());
+                  std::string s3(_vector3.begin(), _vector3.end());
+                  LogPrintf("addSpentIndex scriptPubKey (8) hash(%s).\n", s3);
+                  */
+                  addressHash = uint160(vector <unsigned char>(prevout.scriptPubKey.begin()+2, prevout.scriptPubKey.begin()+22));
+                  addressType = 4;
+              }
+              if (witnessversion != 0) {
+                  addressHash.SetNull();
+                  addressType = 0;
+              }
+          } else {
+              // LogPrintf("addSpentIndex 2 scriptPubKey asm(%s) hex(%s).\n", ScriptToAsmStr(prevout.scriptPubKey), HexStr(prevout.scriptPubKey.begin(), prevout.scriptPubKey.end()));
+              addressHash.SetNull();
+              addressType = 0;
+          }
+        // scriptPubKey.IsPayToWitnessScriptHash()
         CSpentIndexKey key = CSpentIndexKey(input.prevout.hash, input.prevout.n);
         CSpentIndexValue value = CSpentIndexValue(txhash, j, -1, prevout.nValue, addressType, addressHash);
 

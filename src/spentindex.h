@@ -84,6 +84,53 @@ struct CSpentIndexValue {
     }
 };
 
+struct CSpentIndexValue2 {
+    uint256 txid;
+    unsigned int inputIndex;
+    int blockHeight;
+    CAmount satoshis;
+    int addressType;
+    uint256 addressHash;
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
+        READWRITE(txid);
+        READWRITE(inputIndex);
+        READWRITE(blockHeight);
+        READWRITE(satoshis);
+        READWRITE(addressType);
+        READWRITE(addressHash);
+    }
+
+    CSpentIndexValue2(uint256 t, unsigned int i, int h, CAmount s, int type, uint256 a) {
+        txid = t;
+        inputIndex = i;
+        blockHeight = h;
+        satoshis = s;
+        addressType = type;
+        addressHash = a;
+    }
+
+    CSpentIndexValue2() {
+        SetNull();
+    }
+
+    void SetNull() {
+        txid.SetNull();
+        inputIndex = 0;
+        blockHeight = 0;
+        satoshis = 0;
+        addressType = 0;
+        addressHash.SetNull();
+    }
+
+    bool IsNull() const {
+        return txid.IsNull();
+    }
+};
+
 struct CSpentIndexKeyCompare
 {
     bool operator()(const CSpentIndexKey& a, const CSpentIndexKey& b) const {

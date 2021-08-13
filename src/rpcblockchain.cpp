@@ -128,6 +128,7 @@ UniValue blockToDeltasJSON(const CBlock& block, const CBlockIndex* blockindex)
                 UniValue delta(UniValue::VOBJ);
 
                 CSpentIndexValue spentInfo;
+                CSpentIndexValue2 spentInfo2;
                 CSpentIndexKey spentKey(input.prevout.hash, input.prevout.n);
 
                 if (GetSpentIndex(spentKey, spentInfo)) {
@@ -135,6 +136,10 @@ UniValue blockToDeltasJSON(const CBlock& block, const CBlockIndex* blockindex)
                         delta.push_back(Pair("address", CBitcoinAddress(CKeyID(spentInfo.addressHash)).ToString()));
                     } else if (spentInfo.addressType == 2)  {
                         delta.push_back(Pair("address", CBitcoinAddress(CScriptID(spentInfo.addressHash)).ToString()));
+                    } else if (spentInfo.addressType == 3)  {
+                        delta.push_back(Pair("address", CBitcoinAddress(WitnessV0KeyHash(spentInfo.addressHash)).ToStringWKH(WitnessV0KeyHash(spentInfo.addressHash))));
+                    } else if (spentInfo.addressType == 4)  {
+                        delta.push_back(Pair("address", CBitcoinAddress(WitnessV0KeyHash(spentInfo.addressHash)).ToStringWKH(WitnessV0KeyHash(spentInfo.addressHash))));
                     } else {
                         continue;
                     }

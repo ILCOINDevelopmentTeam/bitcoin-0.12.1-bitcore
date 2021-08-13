@@ -32,9 +32,11 @@
 #include "undo.h"
 #include "util.h"
 #include "utilmoneystr.h"
+#include "core_io.h"
 #include "utilstrencodings.h"
 #include "validationinterface.h"
 #include "versionbits.h"
+#include "bech32.h"
 
 #include <sstream>
 
@@ -1476,6 +1478,17 @@ bool GetSpentIndex(CSpentIndexKey &key, CSpentIndexValue &value)
     return true;
 }
 
+bool GetSpentIndex2(CSpentIndexKey &key, CSpentIndexValue2 &value)
+{
+    if (!fSpentIndex)
+        return false;
+
+    if (!pblocktree->ReadSpentIndex2(key, value))
+        return false;
+
+    return true;
+}
+
 bool GetAddressIndex(uint160 addressHash, int type,
                      std::vector<std::pair<CAddressIndexKey, CAmount> > &addressIndex, int start, int end)
 {
@@ -2466,6 +2479,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     std::vector<std::pair<CAddressIndexKey, CAmount> > addressIndex;
     std::vector<std::pair<CAddressUnspentKey, CAddressUnspentValue> > addressUnspentIndex;
     std::vector<std::pair<CSpentIndexKey, CSpentIndexValue> > spentIndex;
+    std::vector<std::pair<CSpentIndexKey, CSpentIndexValue2> > spentIndex2;
+    bool fSpentIndex2 = false;
 
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
@@ -2504,15 +2519,65 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                     const CTxIn input = tx.vin[j];
                     const CTxOut &prevout = view.GetOutputFor(tx.vin[j]);
                     uint160 hashBytes;
+                    uint256 hashBytes2;
                     int addressType;
 
+                    int witnessversion;
+                    std::vector<unsigned char> witnessprogram;
+
                     if (prevout.scriptPubKey.IsPayToScriptHash()) {
+                        LogPrintf("addSpentIndex scriptPubKey (2) asm(%s) hex(%s).\n", ScriptToAsmStr(prevout.scriptPubKey), HexStr(prevout.scriptPubKey.begin(), prevout.scriptPubKey.end()));
                         hashBytes = uint160(vector <unsigned char>(prevout.scriptPubKey.begin()+2, prevout.scriptPubKey.begin()+22));
                         addressType = 2;
                     } else if (prevout.scriptPubKey.IsPayToPublicKeyHash()) {
+                        LogPrintf("addSpentIndex scriptPubKey (1) asm(%s) hex(%s).\n", ScriptToAsmStr(prevout.scriptPubKey), HexStr(prevout.scriptPubKey.begin(), prevout.scriptPubKey.end()));
                         hashBytes = uint160(vector <unsigned char>(prevout.scriptPubKey.begin()+3, prevout.scriptPubKey.begin()+23));
                         addressType = 1;
+                    } else if (prevout.scriptPubKey.IsWitnessProgram(witnessversion, witnessprogram)) {
+                        if (witnessversion == 0 && witnessprogram.size() == 20) {
+                            LogPrintf("addSpentIndex scriptPubKey (3) asm(%s) hex(%s).\n", ScriptToAsmStr(prevout.scriptPubKey), HexStr(prevout.scriptPubKey.begin(), prevout.scriptPubKey.end()));
+                            hashBytes = uint160(vector <unsigned char>(prevout.scriptPubKey.begin()+2, prevout.scriptPubKey.begin()+22));
+                            addressType = 3;
+                        }
+                        if (witnessversion == 0 && witnessprogram.size() == 32) {
+                            LogPrintf("addSpentIndex scriptPubKey (4) asm(%s) hex(%s).\n", ScriptToAsmStr(prevout.scriptPubKey), HexStr(prevout.scriptPubKey.begin(), prevout.scriptPubKey.end()));
+
+                            /*
+                            std::vector<vector<unsigned char>> vSolutions;
+                            vSolutions.clear();
+                            vSolutions.push_back(witnessprogram);
+                            WitnessV0ScriptHash hash;
+                            std::copy(vSolutions[0].begin(), vSolutions[0].end(), hash.begin());
+
+                            const CChainParams& m_params(Params());
+                            std::vector<unsigned char> data = {0};
+                            ConvertBits<8, 5, true>(data, hash.begin(), hash.end());
+                            std::string _hash = bech32::Encode(m_params.Bech32HRP(), data);
+
+                            LogPrintf("addSpentIndex scriptPubKey (5) hash(%s).\n", _hash);
+                            vector <unsigned char> _vector = vector <unsigned char>(_hash.begin(), _hash.end());
+                            std::string s1(_vector.begin(), _vector.end());
+                            LogPrintf("addSpentIndex scriptPubKey (6) hash(%s).\n", s1);
+
+                            vector <unsigned char> _vector2 = vector <unsigned char>(prevout.scriptPubKey.begin()+2, prevout.scriptPubKey.begin()+34);
+                            std::string s2(_vector2.begin(), _vector2.end());
+                            LogPrintf("addSpentIndex scriptPubKey (7) hash(%s).\n", s2);
+
+                            vector <unsigned char> _vector3 = vector <unsigned char>(hash.begin(), hash.end());
+                            std::string s3(_vector3.begin(), _vector3.end());
+                            LogPrintf("addSpentIndex scriptPubKey (8) hash(%s).\n", s3);
+                            */
+                            
+                            hashBytes = uint160(vector <unsigned char>(prevout.scriptPubKey.begin()+2, prevout.scriptPubKey.begin()+22));
+                            hashBytes2 = uint256(vector <unsigned char>(prevout.scriptPubKey.begin()+2, prevout.scriptPubKey.begin()+34));
+                            addressType = 4;
+                        }
+                        if (witnessversion != 0) {
+                            hashBytes.SetNull();
+                            addressType = 0;
+                        }
                     } else {
+                        // LogPrintf("addSpentIndex 2 scriptPubKey asm(%s) hex(%s).\n", ScriptToAsmStr(prevout.scriptPubKey), HexStr(prevout.scriptPubKey.begin(), prevout.scriptPubKey.end()));
                         hashBytes.SetNull();
                         addressType = 0;
                     }
@@ -2528,7 +2593,13 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                     if (fSpentIndex) {
                         // add the spent index to determine the txid and input that spent an output
                         // and to find the amount and address from an input
-                        spentIndex.push_back(make_pair(CSpentIndexKey(input.prevout.hash, input.prevout.n), CSpentIndexValue(txhash, j, pindex->nHeight, prevout.nValue, addressType, hashBytes)));
+                        if (addressType == 4) {
+                          spentIndex2.push_back(make_pair(CSpentIndexKey(input.prevout.hash, input.prevout.n), CSpentIndexValue2(txhash, j, pindex->nHeight, prevout.nValue, addressType, hashBytes2)));
+                          fSpentIndex2 = true;
+                        }
+                        else {
+                          spentIndex.push_back(make_pair(CSpentIndexKey(input.prevout.hash, input.prevout.n), CSpentIndexValue(txhash, j, pindex->nHeight, prevout.nValue, addressType, hashBytes)));
+                        }
                     }
                 }
 
@@ -2644,9 +2715,14 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         }
     }
 
-    if (fSpentIndex)
+    if (fSpentIndex) {
+        if(fSpentIndex2){
+          if (!pblocktree->UpdateSpentIndex2(spentIndex2))
+              return AbortNode(state, "Failed to write transaction index");
+        }
         if (!pblocktree->UpdateSpentIndex(spentIndex))
             return AbortNode(state, "Failed to write transaction index");
+    }
 
     if (fTimestampIndex) {
         unsigned int logicalTS = pindex->nTime;
@@ -4218,7 +4294,7 @@ bool LoadBlockIndex()
     return true;
 }
 
-bool InitBlockIndex(const CChainParams& chainparams) 
+bool InitBlockIndex(const CChainParams& chainparams)
 {
     LOCK(cs_main);
 

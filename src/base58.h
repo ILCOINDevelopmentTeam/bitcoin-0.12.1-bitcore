@@ -86,7 +86,13 @@ public:
     bool SetString(const char* psz, unsigned int nVersionBytes = 1);
     bool SetString(const std::string& str);
     std::string ToString() const;
+    std::string ToStringWKH(const CTxDestination& dest);
     int CompareTo(const CBase58Data& b58) const;
+
+    std::string ToStr(const WitnessV0ScriptHash& id);
+    std::string ToStr(const WitnessV0KeyHash& id);
+    std::string ToStr(const WitnessUnknown& id);
+    std::string ToStr(const CNoDestination& id);
 
     bool operator==(const CBase58Data& b58) const { return CompareTo(b58) == 0; }
     bool operator<=(const CBase58Data& b58) const { return CompareTo(b58) <= 0; }
@@ -105,12 +111,15 @@ class CBitcoinAddress : public CBase58Data {
 public:
     bool Set(const CKeyID &id);
     bool Set(const CScriptID &id);
-    bool Set(const CTxDestination &dest);
+    bool Set(const CTxDestination& dest);
+    bool Set(const WitnessV0ScriptHash& id);
+    bool Set(const WitnessV0KeyHash& id);
+    bool Set(const WitnessUnknown& id);
     bool IsValid() const;
     bool IsValid(const CChainParams &params) const;
 
     CBitcoinAddress() {}
-    CBitcoinAddress(const CTxDestination &dest) { Set(dest); }
+    CBitcoinAddress(const CTxDestination& dest) { Set(dest); }
     CBitcoinAddress(const std::string& strAddress) { SetString(strAddress); }
     CBitcoinAddress(const char* pszAddress) { SetString(pszAddress); }
 
@@ -167,5 +176,10 @@ public:
 
 typedef CBitcoinExtKeyBase<CExtKey, 74, CChainParams::EXT_SECRET_KEY> CBitcoinExtKey;
 typedef CBitcoinExtKeyBase<CExtPubKey, 74, CChainParams::EXT_PUBLIC_KEY> CBitcoinExtPubKey;
+
+std::string EncodeDestination(const CTxDestination& dest);
+CTxDestination DecodeDestination(const std::string& str);
+bool IsValidDestinationString(const std::string& str);
+bool IsValidDestinationString(const std::string& str, const CChainParams& params);
 
 #endif // BITCOIN_BASE58_H

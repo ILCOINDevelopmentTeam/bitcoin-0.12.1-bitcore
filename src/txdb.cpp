@@ -172,9 +172,25 @@ bool CBlockTreeDB::ReadSpentIndex(CSpentIndexKey &key, CSpentIndexValue &value) 
     return Read(make_pair(DB_SPENTINDEX, key), value);
 }
 
+bool CBlockTreeDB::ReadSpentIndex2(CSpentIndexKey &key, CSpentIndexValue2 &value) {
+    return Read(make_pair(DB_SPENTINDEX, key), value);
+}
+
 bool CBlockTreeDB::UpdateSpentIndex(const std::vector<std::pair<CSpentIndexKey, CSpentIndexValue> >&vect) {
     CDBBatch batch(&GetObfuscateKey());
     for (std::vector<std::pair<CSpentIndexKey,CSpentIndexValue> >::const_iterator it=vect.begin(); it!=vect.end(); it++) {
+        if (it->second.IsNull()) {
+            batch.Erase(make_pair(DB_SPENTINDEX, it->first));
+        } else {
+            batch.Write(make_pair(DB_SPENTINDEX, it->first), it->second);
+        }
+    }
+    return WriteBatch(batch);
+}
+
+bool CBlockTreeDB::UpdateSpentIndex2(const std::vector<std::pair<CSpentIndexKey, CSpentIndexValue2> >&vect) {
+    CDBBatch batch(&GetObfuscateKey());
+    for (std::vector<std::pair<CSpentIndexKey,CSpentIndexValue2> >::const_iterator it=vect.begin(); it!=vect.end(); it++) {
         if (it->second.IsNull()) {
             batch.Erase(make_pair(DB_SPENTINDEX, it->first));
         } else {

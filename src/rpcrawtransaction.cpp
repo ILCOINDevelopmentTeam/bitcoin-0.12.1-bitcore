@@ -23,6 +23,8 @@
 #include "txmempool.h"
 #include "uint256.h"
 #include "utilstrencodings.h"
+#include "util.h"
+#include "bech32.h"
 #ifdef ENABLE_WALLET
 #include "wallet/wallet.h"
 #endif
@@ -45,17 +47,28 @@ void ScriptPubKeyToJSON(const CScript& scriptPubKey, UniValue& out, bool fInclud
     if (fIncludeHex)
         out.push_back(Pair("hex", HexStr(scriptPubKey.begin(), scriptPubKey.end())));
 
+    LogPrintf("ScriptPubKeyToJSON ExtractDestinations before.\n");
     if (!ExtractDestinations(scriptPubKey, type, addresses, nRequired)) {
         out.push_back(Pair("type", GetTxnOutputType(type)));
         return;
     }
 
+    LogPrintf("ScriptPubKeyToJSON ExtractDestinations pass.\n");
     out.push_back(Pair("reqSigs", nRequired));
     out.push_back(Pair("type", GetTxnOutputType(type)));
 
+    LogPrintf("ScriptPubKeyToJSON type(%s)\n",GetTxnOutputType(type));
     UniValue a(UniValue::VARR);
-    BOOST_FOREACH(const CTxDestination& addr, addresses)
+    BOOST_FOREACH(const CTxDestination& addr, addresses){
+      if(type == TX_WITNESS_V0_KEYHASH || type == TX_WITNESS_V0_SCRIPTHASH){
+        a.push_back(CBitcoinAddress(addr).ToStringWKH(addr));
+        LogPrintf("ScriptPubKeyToJSON addr(%s)\n",CBitcoinAddress(addr).ToStringWKH(addr));
+      }
+      else {
         a.push_back(CBitcoinAddress(addr).ToString());
+        LogPrintf("ScriptPubKeyToJSON addr(%s)\n",CBitcoinAddress(addr).ToString());
+      }
+    }
     out.push_back(Pair("addresses", a));
 }
 
@@ -83,6 +96,7 @@ void TxToJSONExpanded(const CTransaction& tx, const uint256 hashBlock, UniValue&
 
             // Add address and value info if spentindex enabled
             CSpentIndexValue spentInfo;
+            CSpentIndexValue2 spentInfo2;
             CSpentIndexKey spentKey(txin.prevout.hash, txin.prevout.n);
             if (GetSpentIndex(spentKey, spentInfo)) {
                 in.push_back(Pair("value", ValueFromAmount(spentInfo.satoshis)));
@@ -91,9 +105,62 @@ void TxToJSONExpanded(const CTransaction& tx, const uint256 hashBlock, UniValue&
                     in.push_back(Pair("address", CBitcoinAddress(CKeyID(spentInfo.addressHash)).ToString()));
                 } else if (spentInfo.addressType == 2)  {
                     in.push_back(Pair("address", CBitcoinAddress(CScriptID(spentInfo.addressHash)).ToString()));
+                } else if (spentInfo.addressType == 3)  {
+                    LogPrintf("address WitnessV0KeyHash (%s)(%d).\n", spentInfo.addressHash.ToString(), spentInfo.satoshis);
+                    in.push_back(Pair("address", CBitcoinAddress(WitnessV0KeyHash(spentInfo.addressHash)).ToStringWKH(WitnessV0KeyHash(spentInfo.addressHash))));
+                } else if (spentInfo.addressType == 4)  {
+                    LogPrintf("address WitnessV0ScriptHash (%s)(%d).\n", spentInfo.addressHash.ToString(), spentInfo.satoshis);
+                    int witnessversion;
+                    std::vector<unsigned char> witnessprogram;
+                    if (txin.scriptSig.IsPayToWitnessScriptHash()){
+                      LogPrintf("Yes IsPayToWitnessScriptHash.\n");
+                    }
+                    else {
+                      LogPrintf("No IsPayToWitnessScriptHash.\n");
+                    }
+                    if (txin.scriptSig.IsWitnessProgram(witnessversion, witnessprogram)) {
+                      if (witnessversion == 0 && witnessprogram.size() == 20) {
+                        in.push_back(Pair("address", CBitcoinAddress(WitnessV0KeyHash(spentInfo.addressHash)).ToStringWKH(WitnessV0KeyHash(spentInfo.addressHash))));
+                      }
+                      else if (witnessversion == 0 && witnessprogram.size() == 32) {
+                        std::vector<vector<unsigned char>> vSolutions;
+                        vSolutions.clear();
+                        vSolutions.push_back(witnessprogram);
+                        WitnessV0ScriptHash hash;
+                        std::copy(vSolutions[0].begin(), vSolutions[0].end(), hash.begin());
+
+                        const CChainParams& m_params(Params());
+                        std::vector<unsigned char> data = {0};
+                        ConvertBits<8, 5, true>(data, hash.begin(), hash.end());
+                        std::string _hash = bech32::Encode(m_params.Bech32HRP(), data);
+
+                        LogPrintf("address WitnessV0ScriptHash _hash(%s).\n", _hash);
+                        in.push_back(Pair("address", _hash));
+
+                      }
+                      else {
+                          continue;
+                      }
+                    }
+                    else {
+                      LogPrintf("No WitnessV0ScriptHash.\n");
+                      in.push_back(Pair("address", CBitcoinAddress(WitnessV0KeyHash(spentInfo.addressHash)).ToStringWKH(WitnessV0KeyHash(spentInfo.addressHash))));
+                    }
+                } else {
+                    continue;
                 }
             }
-
+            if (GetSpentIndex2(spentKey, spentInfo2)) {
+                in.push_back(Pair("value", ValueFromAmount(spentInfo2.satoshis)));
+                in.push_back(Pair("valueSat", spentInfo2.satoshis));
+                LogPrintf("address WitnessV0ScriptHash 1 (%s)(%d).\n", spentInfo2.addressHash.ToString(), spentInfo2.satoshis);
+                if (spentInfo2.addressType == 4)  {
+                    LogPrintf("address WitnessV0ScriptHash 2 (%s)(%d).\n", spentInfo2.addressHash.ToString(), spentInfo2.satoshis);
+                    in.push_back(Pair("address", CBitcoinAddress(WitnessV0ScriptHash(spentInfo2.addressHash)).ToStringWKH(WitnessV0ScriptHash(spentInfo2.addressHash))));
+                } else {
+                    continue;
+                }
+            }
         }
         in.push_back(Pair("sequence", (int64_t)txin.nSequence));
         vin.push_back(in);
