@@ -17,9 +17,16 @@ the usage of the absolute path.
 To Build
 ---------------------
 
+wget http://download.oracle.com/berkeley-db/db-4.8.30.NC.tar.gz
+tar -xvzf db-4.8.30.NC.tar.gz
+cd db-4.8.30.NC/build_unix
+../dist/configure --enable-cxx
+make
+make install
+
 ```bash
 ./autogen.sh
-./configure
+./configure CPPFLAGS="-I/usr/local/BerkeleyDB.4.8/include -O2" LDFLAGS="-L/usr/local/BerkeleyDB.4.8/lib" --disable-tests
 export CC_FOR_BUILD=gcc
 make
 make install # optional
