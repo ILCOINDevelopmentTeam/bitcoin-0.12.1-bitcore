@@ -20,6 +20,7 @@ To Build
 ```bash
 ./autogen.sh
 ./configure
+export CC_FOR_BUILD=gcc
 make
 make install # optional
 ```
