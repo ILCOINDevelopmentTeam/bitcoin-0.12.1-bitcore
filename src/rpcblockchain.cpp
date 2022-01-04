@@ -128,7 +128,6 @@ UniValue blockToDeltasJSON(const CBlock& block, const CBlockIndex* blockindex)
                 UniValue delta(UniValue::VOBJ);
 
                 CSpentIndexValue spentInfo;
-                CSpentIndexValue2 spentInfo2;
                 CSpentIndexKey spentKey(input.prevout.hash, input.prevout.n);
 
                 if (GetSpentIndex(spentKey, spentInfo)) {

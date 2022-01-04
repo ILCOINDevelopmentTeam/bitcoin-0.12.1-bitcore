@@ -62,7 +62,7 @@ void ScriptPubKeyToJSON(const CScript& scriptPubKey, UniValue& out, bool fInclud
     BOOST_FOREACH(const CTxDestination& addr, addresses){
       if(type == TX_WITNESS_V0_KEYHASH || type == TX_WITNESS_V0_SCRIPTHASH){
         a.push_back(CBitcoinAddress(addr).ToStringWKH(addr));
-        LogPrintf("ScriptPubKeyToJSON addr(%s)\n",CBitcoinAddress(addr).ToStringWKH(addr));
+        LogPrintf("ScriptPubKeyToJSON bc1 addr(%s)\n",CBitcoinAddress(addr).ToStringWKH(addr));
       }
       else {
         a.push_back(CBitcoinAddress(addr).ToString());
@@ -70,6 +70,7 @@ void ScriptPubKeyToJSON(const CScript& scriptPubKey, UniValue& out, bool fInclud
       }
     }
     out.push_back(Pair("addresses", a));
+    LogPrintf("ScriptPubKeyToJSON Done.\n");
 }
 
 void TxToJSONExpanded(const CTransaction& tx, const uint256 hashBlock, UniValue& entry,
@@ -177,9 +178,11 @@ void TxToJSONExpanded(const CTransaction& tx, const uint256 hashBlock, UniValue&
         ScriptPubKeyToJSON(txout.scriptPubKey, o, true);
         out.push_back(Pair("scriptPubKey", o));
 
+        LogPrintf("ScriptPubKeyToJSON TxToJSONExpanded.\n");
         // Add spent information if spentindex is enabled
         CSpentIndexValue spentInfo;
         CSpentIndexKey spentKey(txid, i);
+        LogPrintf("ScriptPubKeyToJSON spentKey.\n");
         if (GetSpentIndex(spentKey, spentInfo)) {
             out.push_back(Pair("spentTxId", spentInfo.txid.GetHex()));
             out.push_back(Pair("spentIndex", (int)spentInfo.inputIndex));
@@ -189,11 +192,17 @@ void TxToJSONExpanded(const CTransaction& tx, const uint256 hashBlock, UniValue&
         vout.push_back(out);
     }
     entry.push_back(Pair("vout", vout));
+    LogPrintf("ScriptPubKeyToJSON vout.\n");
 
     if (!hashBlock.IsNull()) {
         entry.push_back(Pair("blockhash", hashBlock.GetHex()));
+        LogPrintf("ScriptPubKeyToJSON hashBlock.GetHex(%s).\n", hashBlock.ToString());
+        LogPrintf("ScriptPubKeyToJSON nConfirmations %d.\n", nConfirmations);
 
         if (nConfirmations > 0) {
+            LogPrintf("ScriptPubKeyToJSON nHeight %d.\n", nHeight);
+            LogPrintf("ScriptPubKeyToJSON nConfirmations %d.\n", nConfirmations);
+            LogPrintf("ScriptPubKeyToJSON nBlockTime %d.\n", nBlockTime);
             entry.push_back(Pair("height", nHeight));
             entry.push_back(Pair("confirmations", nConfirmations));
             entry.push_back(Pair("time", nBlockTime));
@@ -203,6 +212,8 @@ void TxToJSONExpanded(const CTransaction& tx, const uint256 hashBlock, UniValue&
             entry.push_back(Pair("confirmations", 0));
         }
     }
+
+    LogPrintf("ScriptPubKeyToJSON End.\n");
 
 }
 
@@ -244,6 +255,8 @@ void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& entry)
         ScriptPubKeyToJSON(txout.scriptPubKey, o, true);
         out.push_back(Pair("scriptPubKey", o));
         vout.push_back(out);
+
+        LogPrintf("ScriptPubKeyToJSON TxToJSON.\n");
     }
     entry.push_back(Pair("vout", vout));
 
